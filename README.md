@@ -1,4 +1,4 @@
-# 🕵️‍♂️ Project ShadowLink: Level 2 RAT (Remote Access Tool)
+# 🕵️‍♂️ Project ShadowLink:RAT (Remote Access Tool)
 
 **Project ShadowLink** is an advanced Python-based Reverse Shell implementation designed for Red Team operations and cybersecurity education.
 
@@ -36,7 +36,7 @@ The project consists of two core components:
 
 2.  **The Agent (`client.py`):**
     * Connects back to the Commander.
-    * Executes system commands via `subprocess`.
+    * Executes system comands via `subprocess`.
     * Handles file streams and acknowledges receipt/delivery of data.
 
 ---
